@@ -1,0 +1,886 @@
+OPTION STRICT
+
+VAR ROOMS%,ITEMS%,OBJECTS%
+ROOMS%=9
+ITEMS%=7
+OBJECTS%=15
+DIM ROOMNAME$[ROOMS%],ROOMDESC$[ROOMS%],ROOMDIRECT$[ROOMS%],ROOMEXITS$[ROOMS%] 'ROOMS.
+DIM ITEMNAME$[ITEMS%],ITEMDESC$[ITEMS%],ITEMUSE$[ITEMS%],ITEMLOC%[ITEMS%],PLAYERINV%[ITEMS%] 'ITEMS (CAN ADD TO INVENTORY).
+DIM OBJNAME$[OBJECTS%],OBJDESC$[OBJECTS%],OBJUSE$[OBJECTS%],OBJLOC%[OBJECTS%] 'OBJECTS (CANNOT BE ADDED TO INVENTORY.
+DIM ENDING$[5]
+VAR ROOMID%,TARGET$,CMDIN$,CTRL%,NSW%,CCYAN%,CRED%,CBLUE%,CWHITE%,CGREEN%,TARGETID%,END%,CYELLOW%,ACTION%,HP%,NR%,CANTSEE$,ABTN%,BGM%
+CANTSEE$="I don't see anything like that!"
+
+
+ACLS
+BGMSTOP 
+
+PRINT "※※※PREPARING TO START GAME...※※※"
+PRINT "THIS GAME WAS DEVELOPED ON A NEW 2DS XL, BUT"
+PRINT "HAS SUPPORT FOR THE SWITCH."
+PRINT
+PRINT "SWITCH PUBLIC KEY: 4JKK32W4E"
+PRINT "TO CONVERT THIS VERSION TO SWITCH, CHANGE"
+PRINT "THE '3DS' ON LINE 29 TO 'SWITCH'."
+PRINT "CHECK LINES 53-57 FOR CUSTOM BGM.
+PRINT CHR$(10)+"PRESS THE Ⓐ BUTTON TO CONTINUE."
+@COMPATIBILITY
+'LINPUT "USING 3DS OR SWITCH?> ";CMDIN$
+CMDIN$="3DS"
+IF CMDIN$ == "3DS" OR CMDIN$ == "3ds" THEN
+CCYAN%=13
+CRED%=3
+CBLUE%=9
+CWHITE%=15
+CGREEN%=5
+CYELLOW%=7
+ABTN%=16
+BGMSETD 230,@BGM103 'BY RWIIUG2019.
+BGM%=230
+
+ELSEIF CMDIN$ == "SWITCH" OR CMDIN$ == "Switch" OR CMDIN$ == "switch" THEN
+NSW%=1
+CCYAN%=&HFF00FFFF
+CRED%=&HFFFF0000
+CBLUE%=&HFF0000FF
+CWHITE%=&HFFFFFFFF
+CGREEN%=&HFF00FF00
+CYELLOW%=&HFFFFFF00
+ABTN%=3
+'BGMSETD 230,@BGM103NSW
+'BGM%=230
+BGM%=1
+'T0 RESTORE CUSTOM BGM ON SWITCH, COMMENT OUT
+'LINE 50, UNCOMMENT LINES 49, 874, AND 876.
+'DOWNLOAD ALL OVER THE MMLs.
+'COPY "BGM 103" BY RWIIUG AND PASTE TO
+'LINE 875.
+SYSPARAM "MOUSECURSOR",1
+ELSE
+BEEP 4
+GOTO @COMPATIBILITY
+ENDIF
+
+BTNWAIT
+CLS
+
+GOTO @INIT
+
+@MAIN
+COLOR CWHITE%
+IF ACTION% == 0 THEN END%=-1
+IF ROOMID% == 0 THEN END%=-3
+IF ACTION% == 0 OR ROOMID% == 0 THEN @THEEND
+PRINT
+IF ACTION% != -1 THEN PRINT "ACTIONS LEFT: ";ACTION%;"/20"
+CMDIN$=""
+REPEAT
+LINPUT "What do I do? ";CMDIN$
+PRINT
+UNTIL CMDIN$ != ""
+IF LEN(CMDIN$) == 1 AND INSTR("NESW",CMDIN$) != -1 THEN @MOVE
+IF CMDIN$ == "DROP" THEN @DROP
+IF CMDIN$ == "EXAMINE" OR CMDIN$ == "X" THEN @EXAMINE
+IF CMDIN$ == "HELP" THEN @HELP
+IF CMDIN$ == "INVENTORY" OR CMDIN$ == "I" THEN @INVENTORY
+IF CMDIN$ == "LOOK" THEN @LOOK
+IF CMDIN$ == "QUIT" THEN
+END%=0
+GOTO @THEEND
+ENDIF
+IF CMDIN$ == "TAKE" THEN @TAKE
+IF CMDIN$ == "USE" THEN @USE
+IF CMDIN$ == "NORTH" OR CMDIN$ == "EAST" OR CMDIN$ == "SOUTH" OR CMDIN$ == "WEST" THEN
+CMDIN$=MID$(CMDIN$,0,1)
+GOTO @MOVE
+ENDIF
+PRINT "I must be going crazy if I can't understand"
+PRINT "my own thoughts!"
+GOTO @MAIN
+
+@DROP
+TARGET$=""
+REPEAT
+PRINT
+LINPUT "What should I drop? ";TARGET$
+PRINT
+UNTIL TARGET$ != ""
+TARGETID%=-1
+FOR CTRL%=0 TO ITEMS%-1
+IF TARGET$ == ITEMNAME$[CTRL%] THEN
+TARGETID%=CTRL%
+BREAK
+ENDIF
+NEXT
+IF TARGET$ == "SELF" THEN
+BEEP 4
+PRINT "I'm not in the mood for an out-of-body event."
+ELSEIF TARGETID% == 1 OR TARGETID% == 2 THEN
+BEEP 4
+PRINT "This isn't that type of game!"
+ELSEIF TARGETID% == -1 OR PLAYERINV%[ABS(TARGETID%)] == 0 THEN
+BEEP 4
+PRINT "I don't have that!"
+ELSE
+PLAYERINV%[TARGETID%]=0
+ITEMLOC%[TARGETID%]=ROOMID%
+CALL "TYPE","I dropped the "+ITEMNAME$[TARGETID%]+"."
+GOSUB @DECACTION
+ENDIF
+GOTO @MAIN
+
+@EXAMINE
+TARGETID%=-1
+TARGET$=""
+REPEAT
+PRINT
+LINPUT "What should I examine? ";TARGET$
+PRINT
+UNTIL TARGET$ != ""
+FOR CTRL%=0 TO ITEMS%-1
+IF TARGET$ == ITEMNAME$[CTRL%] THEN
+TARGETID%=CTRL%
+BREAK
+ENDIF
+NEXT
+IF TARGETID% != -1 THEN @XITEM
+FOR CTRL%=0 TO OBJECTS%-1
+IF TARGET$ == OBJNAME$[CTRL%] THEN
+TARGETID%=CTRL%
+BREAK
+ENDIF
+NEXT
+IF TARGETID% != -1 THEN @XOBJ
+GOTO @XWHAT
+@XITEM
+IF PLAYERINV%[TARGETID%] == 0 AND ITEMLOC%[TARGETID%] != ROOMID% THEN @XWHAT
+COLOR CCYAN%
+CALL "TYPE",ITEMDESC$[TARGETID%]
+COLOR CWHITE%
+GOTO @MAIN
+@XOBJ
+IF OBJLOC%[TARGETID%] != ROOMID% THEN @XWHAT
+COLOR CCYAN%
+CALL "TYPE",OBJDESC$[TARGETID%]
+COLOR CWHITE%
+GOTO @MAIN
+@XWHAT
+IF TARGET$ == "SELF" THEN
+COLOR CCYAN%
+CALL "TYPE","Looking cute!"
+COLOR CWHITE%
+IF HP% != 3 THEN
+COLOR CGREEN%
+PRINT "HEALTH: ";
+COLOR CRED%
+PRINT HP%;"/3"
+ENDIF
+ELSE
+BEEP 4
+PRINT CANTSEE$
+ENDIF
+GOTO @MAIN
+
+@HELP
+CLS
+TARGET$=""
+PRINT "What do you need help with?"
+PRINT "Type a command, or LIST to list all commands."
+PRINT "Targeted commands will prompt for the target."
+REPEAT
+PRINT
+LINPUT "HELP with? ";TARGET$
+PRINT
+UNTIL TARGET$ != ""
+COLOR CGREEN%
+IF TARGET$ == "DROP" THEN
+PRINT "Targeted command."
+PRINT "Drops an item from inventory into the"
+PRINT "current room."
+ELSEIF TARGET$ == "EAST" OR TARGET$ == "E" THEN
+PRINT "Go east, if there is an eastern exit."
+ELSEIF TARGET$ == "EXAMINE" OR TARGET$ == "X" THEN
+PRINT "Targeted command."
+PRINT "Get more information on an item or object."
+ELSEIF TARGET$ == "HELP" THEN
+PRINT "List all commands or get details on a specific"
+PRINT "command."
+ELSEIF TARGET$ == "INVENTORY" OR TARGET$ == "I" THEN
+PRINT "List all items in your inventory."
+ELSEIF TARGET$ == "LIST" THEN
+PRINT "ALL COMMANDS [ALIASES IN BRACKETS]:"
+PRINT "DROP","EAST [E]","EXAMINE [X]","HELP"
+PRINT "INVENTORY [I]","LOOK","NORTH [N]","QUIT"
+PRINT "SOUTH [S]","TAKE","USE","WEST [W]"
+PRINT
+PRINT "COMMANDS MUST BE IN UPPERCASE."
+ELSEIF TARGET$ == "LOOK" THEN
+PRINT "Get a full description of your surroundings."
+ELSEIF TARGET$ == "NORTH" OR TARGET$ == "N" THEN
+PRINT "Go north, if there is a northern exit."
+ELSEIF TARGET$ == "QUIT" THEN
+PRINT "Exit the game."
+COLOR CRED%
+PRINT "WARNING! ";
+COLOR CGREEN%
+PRINT "Progress will not be saved!"
+ELSEIF TARGET$ == "SOUTH" OR TARGET$ == "S" THEN
+PRINT "Go south, if there is a southern exit."ELSEIF TARGET$ == "TAKE" THEN
+PRINT "Targeted command."
+PRINT "Add an item in the room to your inventory."
+ELSEIF TARGET$ == "USE" THEN
+PRINT "Targeted command."
+PRINT "Use an item or object. May need extra target."
+ELSEIF TARGET$ == "WEST" OR TARGET$ == "W" THEN
+PRINT "Go west, if there is a western exit."
+ELSE
+PRINT "Command not recognized."
+ENDIF
+COLOR CWHITE%
+IF TARGET$ == "LIST" THEN
+PRINT
+PRINT "PRESS THE Ⓐ BUTTON TO CONTINUE."
+BTNWAIT
+CLS
+ENDIF
+GOTO @MAIN
+
+@INVENTORY
+PRINT
+PRINT "I have ";
+COLOR CBLUE%
+FOR CTRL%=0 TO ITEMS%-1
+IF PLAYERINV%[CTRL%] == 1 THEN PRINT ITEMNAME$[CTRL%]
+NEXT
+COLOR CWHITE%
+GOTO @MAIN
+
+@LOOK
+CLS
+COLOR CWHITE%
+PRINT "I am in the ";
+COLOR CYELLOW%
+PRINT ROOMNAME$[ROOMID%];
+COLOR CWHITE%
+PRINT "."
+PRINT "Exits are:",
+COLOR CRED%
+IF ROOMEXITS$[ROOMID%] == "X" THEN PRINT "NONE",
+IF INSTR(ROOMEXITS$[ROOMID%],"N") != -1 THEN PRINT "North",
+IF INSTR(ROOMEXITS$[ROOMID%],"E") != -1 THEN PRINT "East",
+IF INSTR(ROOMEXITS$[ROOMID%],"S") != -1 THEN PRINT "South",
+IF INSTR(ROOMEXITS$[ROOMID%],"W") != -1 THEN PRINT "West",
+PRINT
+COLOR CWHITE%
+PRINT "I see: ";
+COLOR CBLUE%
+FOR CTRL%=0 TO OBJECTS%-1
+IF ROOMID% == OBJLOC%[CTRL%] THEN PRINT "a ";OBJNAME$[CTRL%]
+NEXT
+PRINT
+FOR CTRL%=0 TO ITEMS%-1
+IF ROOMID% == ITEMLOC%[CTRL%] THEN PRINT "a ";ITEMNAME$[CTRL%]
+NEXT
+PRINT
+COLOR CCYAN%
+CALL "TYPE",ROOMDESC$[ROOMID%]
+COLOR CWHITE%
+GOTO @MAIN
+
+@MOVE
+'N10E40S70W10
+IF CMDIN$ == "N" THEN TARGET$=MID$(ROOMDIRECT$[ROOMID%],1,2)
+IF CMDIN$ == "E" THEN TARGET$=MID$(ROOMDIRECT$[ROOMID%],4,2)
+IF CMDIN$ == "S" THEN TARGET$=MID$(ROOMDIRECT$[ROOMID%],7,2)
+IF CMDIN$ == "W" THEN TARGET$=MID$(ROOMDIRECT$[ROOMID%],10,2)
+NR%=VAL(TARGET$)
+IF ROOMID% == 4 AND NR% == 0 THEN ROOMDESC$[0]=ROOMDESC$[0]+DECRYPT("!tsrif reddalb ym deitpme ev'dluohs I ebyaMΘ")
+IF NR% == 8 THEN
+FILL PLAYERINV%,0
+PLAYERINV%[1]=1
+ROOMNAME$[8]=DECRYPT(ROOMNAME$[8])
+ROOMDESC$[8]=DECRYPT(ROOMDESC$[8])
+OBJNAME$[14]=DECRYPT(OBJNAME$[14])
+OBJDESC$[14]=DECRYPT(OBJDESC$[14])
+OBJUSE$[14]=DECRYPT(OBJUSE$[14])
+ENDIF
+IF NR% == -1 THEN
+BEEP 4
+PRINT "I can't go that way!"
+GOTO @MAIN
+ELSE
+ROOMID%=NR%
+GOSUB @DECACTION
+GOTO @LOOK
+ENDIF
+
+@TAKE
+TARGET$=""
+REPEAT
+PRINT
+LINPUT "Take what? ";TARGET$
+PRINT
+UNTIL TARGET$ != ""
+TARGETID%=-1
+FOR CTRL%=0 TO ITEMS%-1
+IF TARGET$ == ITEMNAME$[CTRL%] THEN
+TARGETID%=CTRL%
+BREAK
+ENDIF
+NEXT
+IF TARGETID% != -1 THEN @GETITEM
+FOR CTRL%=0 TO OBJECTS%-1
+IF TARGET$ == OBJNAME$[CTRL%] THEN
+TARGETID%=CTRL%
+BREAK
+ENDIF
+NEXT
+IF TARGETID% != -1 THEN @GETOBJ
+BEEP 4
+IF TARGET$ == "SELF" THEN
+PRINT "What's that supposed to mean?"
+ELSE
+PRINT CANTSEE$
+ENDIF
+GOTO @MAIN
+@GETOBJ
+BEEP 4
+IF OBJLOC%[TARGETID%] != ROOMID% THEN
+PRINT CANTSEE$
+ELSEIF OBJNAME$[TARGETID%] == "3DS" THEN
+PRINT "I can't take that, it's charging!"
+ELSE
+PRINT "I can't carry that!"
+ENDIF
+GOTO @MAIN
+@GETITEM
+IF PLAYERINV%[TARGETID%] == 1 THEN
+BEEP 4
+PRINT "I already have that!"
+ELSEIF ITEMLOC%[TARGETID%] != ROOMID% AND PLAYERINV%[TARGETID%] == 0 THEN
+BEEP 4
+PRINT CANTSEE$
+ELSEIF ITEMNAME$[TARGETID%] == "KEY" AND ROOMID% == 4 AND (OBJNAME$[8] == "RAT" AND OBJLOC%[8] == ROOMID%) THEN
+BEEP 13
+CALL "TYPE","As you reach for the KEY, the RAT suddenlyΘattacks!"
+HP%=HP%-1
+IF HP% == 0 THEN
+END%=-2
+GOTO @THEEND
+ENDIF
+COLOR CRED%
+PRINT "The RAT bites your hand!"
+GOSUB @DECACTION
+ELSE
+PLAYERINV%[TARGETID%]=1
+ITEMLOC%[TARGETID%]=-1
+PRINT "Got the ";
+COLOR CBLUE%
+PRINT ITEMNAME$[TARGETID%];
+COLOR CWHITE%
+PRINT "!"
+ENDIF
+GOTO @MAIN
+
+@THEEND
+IF END% == 0 THEN
+PRINT "Exit the game? Progress will not be saved!"
+TARGET$=""
+REPEAT
+LINPUT "Y/N? ";TARGET$
+UNTIL TARGET$ == "Y" OR TARGET$ == "N"
+IF TARGET$ == "Y" THEN @QUIT
+IF TARGET$ == "N" THEN @MAIN
+ELSEIF END% == -1 THEN
+COLOR CYELLOW%
+BGMSTOP
+BGMPLAY 19
+CALL "TYPE",DECRYPT(ENDING$[0])
+ELSEIF END% == -2 THEN
+BGMSTOP
+BGMPLAY 30
+COLOR CRED%
+CALL "TYPE",DECRYPT(ENDING$[1])
+ELSEIF END% == -3 THEN
+BGMSTOP
+BGMPLAY 15
+COLOR CCYAN%
+CALL "TYPE",DECRYPT(ENDING$[2])
+ELSEIF END% == 1 THEN
+BGMSTOP
+IF NSW% == 1 THEN
+BGMPLAY 54
+ELSE
+BGMPLAY 26
+ENDIF
+COLOR CCYAN%
+CALL "TYPE",DECRYPT(ENDING$[3])
+ELSEIF END% == 2 THEN
+BGMSTOP
+IF NSW% == 1 THEN
+BGMPLAY 47
+ELSE
+BGMPLAY 3
+ENDIF
+COLOR CCYAN%
+CALL "TYPE",DECRYPT(ENDING$[4])
+ELSE
+COLOR CRED%
+BGMSTOP
+BGMPLAY 22
+CALL "TYPE","IMPOSSIBLE GLITCH ENDING!"
+ENDIF
+COLOR CWHITE%
+CALL "TYPE","AND NOW YOUR ADVENTURE COMES TO A CLOSE!"
+PRINT
+PRINT "PRESS THE Ⓐ BUTTON TO QUIT."
+BTNWAIT
+@QUIT
+ACLS
+BGMSTOP
+PRINT "THANKS FOR PLAYING!"
+END
+
+@USE
+TARGET$=""
+REPEAT
+PRINT
+LINPUT "Use what? ";TARGET$
+PRINT
+UNTIL TARGET$ != ""
+TARGETID%=-1
+FOR CTRL%=0 TO ITEMS%-1
+IF TARGET$ == ITEMNAME$[CTRL%] THEN
+TARGETID%=CTRL% 
+BREAK
+ENDIF
+NEXT
+IF TARGETID% != -1 THEN @USEITEM
+FOR CTRL%=0 TO OBJECTS%-1
+IF TARGET$ == OBJNAME$[CTRL%] THEN
+TARGETID%=CTRL%
+BREAK
+ENDIF
+NEXT
+IF TARGETID% != -1 THEN @USEOBJ
+BEEP 4
+IF TARGET$ == "SELF" THEN
+PRINT "Excuse me!?"
+ELSE
+PRINT CANTSEE$
+ENDIF
+GOTO @MAIN
+@USEOBJ
+IF OBJLOC%[TARGETID%] != ROOMID% THEN
+BEEP 4
+PRINT CANTSEE$
+ELSEIF TARGET$ == "BED" THEN
+IF ACTION% == -1 THEN
+CALL "TYPE",OBJUSE$[TARGETID%]
+END%=1
+GOTO @THEEND
+ELSE
+CALL "TYPE",OBJUSE$[TARGETID%]
+ENDIF
+ELSEIF TARGET$ == "3DS" THEN
+BGMPAUSE 0
+BGMPLAY 1,42
+CALL "TYPE",OBJUSE$[TARGETID%]
+WAIT 300
+REPEAT
+PRINT "Ready to get going?"
+LINPUT "Y/N ";CMDIN$
+UNTIL CMDIN$ == "Y"
+BGMSTOP 1
+BGMCONT
+ELSEIF TARGET$ == "STAIRS" AND ROOMID% == 2 THEN
+ROOMID%=5
+OBJDESC$[TARGETID%]="Stairs heading up."
+OBJLOC%[TARGETID%]=5
+CALL "TYPE",OBJUSE$[TARGETID%]
+OBJUSE$[TARGETID%]="You head down the stairs."
+WAIT 150
+IF ACTION% != -1 THEN ACTION%=ACTION%-1
+GOTO @LOOK
+ELSEIF TARGET$ == "STAIRS" AND ROOMID% == 5 THEN
+ROOMID%=2
+OBJDESC$[TARGETID%]="Stairs heading down."
+OBJLOC%[TARGETID%]=2
+CALL "TYPE",OBJUSE$[TARGETID%]
+OBJUSE$[TARGETID%]="You head down the stairs."
+WAIT 150
+IF ACTION% != -1 THEN ACTION%=ACTION%-1
+GOTO @LOOK
+ELSEIF TARGET$ == "LADDER" AND ROOMID% == 2 THEN
+ROOMID%=4
+OBJDESC$[TARGETID%]="A ladder to the Upstairs Hallway."
+OBJLOC%[TARGETID%]=4
+CALL "TYPE",OBJUSE$[TARGETID%]
+OBJUSE$[TARGETID%]="You climb down the ladder."
+WAIT 150
+IF ACTION% != -1 THEN ACTION%=ACTION%-1
+GOTO @LOOK
+ELSEIF TARGET$ == "LADDER" AND ROOMID% == 4 THEN
+ROOMID%=2
+OBJDESC$[TARGETID%]="A ladder to the Attic."
+OBJLOC%[TARGETID%]=2
+CALL "TYPE",OBJUSE$[TARGETID%]
+OBJUSE$[TARGETID%]="You climb up the ladder."
+WAIT 150
+IF ACTION% != -1 THEN ACTION%=ACTION%-1
+GOTO @LOOK
+ELSEIF TARGET$ == "TOILET" THEN
+IF ACTION% == -1 THEN
+CALL "TYPE",OBJUSE$[TARGETID%]
+ELSE
+CALL "TYPE",OBJUSE$[TARGETID%]
+ACTION%=-1
+OBJUSE$[TARGETID%]="My bladder's empty now!"
+OBJUSE$[1]="You get in bed and cuddle with the teddy bearΘthat is probably yours."
+ENDIF
+ELSEIF TARGET$ == "FRIDGE" THEN
+CALL "TYPE",OBJUSE$[TARGETID%]
+OBJNAME$[TARGETID%]="BROKEN FRIDGE"
+OBJDESC$[TARGETID%]="A fridge. Iits door lies on the ground."
+OBJUSE$[TARGETID%]="There's no use for a BROKEN FRIDGE!"
+OBJLOC%[TARGETID%+1]=6
+ITEMLOC%[ITEMS%-1]=6
+ELSEIF TARGET$ == OBJNAME$[OBJECTS%-1] THEN
+CALL "TYPE",OBJUSE$[TARGETID%]
+END%=2
+GOTO @THEEND
+ELSE
+CALL "TYPE",OBJUSE$[TARGETID%]
+ENDIF
+GOTO @MAIN
+@USEITEM
+IF (PLAYERINV%[TARGETID%] == 0 AND ITEMLOC%[TARGETID%] != ROOMID%) OR ITEMUSE$[TARGETID%] == "NOUSE" THEN
+BEEP 4
+IF PLAYERINV%[TARGETID%] == 0 AND ITEMLOC%[TARGETID%] != ROOMID% THEN
+PRINT CANTSEE$
+ELSE
+PRINT "I can't use that!"
+ENDIF
+GOTO @MAIN
+ENDIF
+CMDIN$=""
+REPEAT
+PRINT
+LINPUT "Use "+ITEMNAME$[TARGETID%]+" on what? ";CMDIN$
+PRINT
+UNTIL CMDIN$ != ""
+IF CMDIN$ == "SELF" THEN @USESELF
+FOR CTRL%=0 TO OBJECTS%-1
+IF CMDIN$ == OBJNAME$[CTRL%] THEN BREAK
+NEXT
+IF CTRL% == OBJECTS% THEN
+BEEP 4
+PRINT CANTSEE$
+GOTO @MAIN
+ELSEIF OBJLOC%[CTRL%] != ROOMID% THEN
+BEEP 4
+PRINT CANTSEE$
+GOTO  @MAIN
+ENDIF
+NR%=0
+IF TARGET$ == "KEY" AND CMDIN$ == "BATHROOM DOOR" THEN
+OBJLOC%[CTRL%]=-1
+ROOMDIRECT$[ROOMID%]="N03E-1S-1W01"
+ROOMEXITS$[ROOMID%]="NW"
+GOSUB @DECACTION
+ELSEIF TARGET$ == "KEY" AND CMDIN$ == "FRONT DOOR" THEN
+NR%=1
+ELSEIF TARGET$ == "KNIFE" AND CMDIN$ == "RAT" THEN
+OBJLOC%[CTRL%]=-1
+ITEMLOC%[4]=ROOMID%
+PLAYERINV%[TARGETID%]=0
+ITEMLOC%[TARGETID%]=-1
+GOSUB @DECACTION
+ELSEIF TARGET$ == "KNIFE" AND CMDIN$ == "WINDOW" THEN
+OBJNAME$[CTRL%]="WINDOW FRAME"
+OBJDESC$[CTRL%]="An empty frame devoid of glass."
+OBJUSE$[CTRL%]="There's nothing to use!"
+PLAYERINV%[TARGETID%]=0
+ITEMLOC%[TARGETID%]=-1
+NR%=1
+ROOMEXITS$[ROOMID%]="N"
+IF ACTION% == -1 THEN
+ROOMDIRECT$[ROOMID%]="N08E-1S-1W-1"
+ELSE
+ROOMDIRECT$[ROOMID%]="N00E-1S-1W-1"
+ENDIF
+GOSUB @DECACTION
+ELSEIF TARGET$ == "STRAWBERRY" AND CMDIN$ == "RAT" THEN
+OBJNAME$[CTRL%]="HAPPY RAT"
+OBJDESC$[CTRL%]="It's a very happy rat!"
+PLAYERINV%[TARGETID%]=0
+ITEMLOC%[TARGETID%]=-1
+GOSUB @DECACTION
+ELSE
+BEEP 4
+PRINT "I can't use the ";
+COLOR CBLUE%
+PRINT ITEMNAME$[TARGETID%];
+COLOR CWHITE%
+PRINT " on that!"
+NR%=-1
+ENDIF
+IF NR% != -1 THEN CALL "ITEMTRIM",NR%,ITEMUSE$[TARGETID%]
+GOTO @MAIN
+@USESELF
+IF TARGET$ == "KNIFE" THEN
+BEEP 4
+COLOR CRED%
+PRINT "This isn't that type of game!"
+COLOR CWHITE%
+ELSEIF TARGET$ == "STRAWBERRY" THEN
+IF HP% == 3 THEN
+BEEP 4
+PRINT "I'm already at full health!"
+ELSE
+CALL "ITEMTRIM",1,ITEMUSE$[TARGETID%]
+PRINT "OM NOM NOM!"
+HP%=3
+PLAYERINV%[TARGETID%]=0
+ITEMLOC%[TARGETID%]=-1
+GOSUB @DECACTION
+ENDIF
+ELSE
+BEEP 4
+PRINT "I can't use that ";
+COLOR CBLUE%
+PRINT ITEMNAME$[TARGETID%];
+COLOR CWHITE%
+PRINT " on myself!"
+ENDIF
+GOTO @MAIN
+
+
+
+@INTRO
+CLS
+BGMPLAY 34
+COLOR CCYAN%
+CALL "TYPE","You wake up late one night in an unfamiliarΘhome. You don't know who, what, when, or whereΘyou are. More importantly, your bladder isΘfull!"
+
+COLOR CWHITE%
+REPEAT
+PRINT
+LINPUT "View instructions? Y/N ";CMDIN$
+PRINT
+UNTIL (CMDIN$ == "Y" OR CMDIN$ == "y") OR (CMDIN$ == "N" OR CMDIN$ == "n")
+CLS
+IF CMDIN$ == "Y" OR CMDIN$ == "y" THEN
+CLS
+COLOR CCYAN%
+CALL "TYPE","In this game, your goal is to get to theΘbathroom and use the toilet before yourΘbladder gives way. You can hold it in for 20Θminutes. Physical actions, such as movingΘrooms or using items, takes 1 minute toΘperform. Unsuccessful and non-physicalΘactions, such as examining an object, take noΘtime at all."
+CMDIN$=""
+COLOR CWHITE%
+REPEAT
+PRINT
+LINPUT "View full command list? Y/N ";CMDIN$
+PRINT
+UNTIL (CMDIN$ == "Y" OR CMDIN$ == "y") OR (CMDIN$ == "N" OR CMDIN$ == "n")
+IF CMDIN$ == "Y" OR CMDIN$ == "y" THEN
+CLS
+COLOR CCYAN%
+PRINT "Commands should be inputted in all caps."
+PRINT "Letters in [brackets] are shortcuts."
+PRINT "Some commands are targeted. You will be"
+PRINT "prompted  for the target when using them."
+PRINT
+COLOR CRED%
+PRINT "MOVEMENT:"
+COLOR CCYAN%
+PRINT "[N]ORTH","[E]AST","[S]OUTH","[W]EST"
+COLOR CRED%
+PRINT "PHYSICAL:"
+COLOR CCYAN%
+PRINT "DROP","TAKE","USE"
+COLOR CRED%
+PRINT "NON-PHYSICAL:"
+COLOR CCYAN%
+PRINT "E[X]AMINE","[I]NVENTORY","LOOK"
+COLOR CRED%
+PRINT "OTHER:"
+COLOR CCYAN%
+PRINT "HELP","QUIT"
+COLOR CWHITE%
+PRINT
+PRINT "PRESS THE Ⓐ BUTTON TO CONTINUE."
+BTNWAIT
+ENDIF
+ENDIF
+CLS
+COLOR CCYAN%
+BGMSTOP
+BGMPLAY 18
+PRINT
+PRINT
+PRINT
+PRINT "                ";
+CALL "TYPE","LATE ONE NIGHT"
+PRINT
+PRINT "             ";
+CALL "TYPE","A TEXT ADVENTURE BY"
+PRINT "                 ";
+CALL "TYPE","CRYSTALTIKAL"
+PRINT
+PRINT
+PRINT "       ";
+CALL "TYPE","WITH MUSIC BY RWIIUG & SMILEBOOM"
+PRINT
+PRINT
+PRINT "             ";
+CALL "TYPE","© 2024   Version 1.3"
+PRINT
+PRINT "       "
+PRINT "        ";
+CALL "TYPE","PRESS THE Ⓐ BUTTON TO CONTINUE"
+BTNWAIT
+CLS
+COLOR CWHITE%
+CMDIN$=""
+REPEAT
+LINPUT "View the changelog? Y/N ";CMDIN$
+PRINT
+UNTIL CMDIN$ == "Y" OR CMDIN$ == "N"
+IF CMDIN$ == "Y" THEN
+PRINT "Version 1.0:"
+PRINT "Initial release (not publicly)."
+PRINT
+PRINT "Version 1.1:"
+PRINT "Fixed CWHITE% not being set on Switch."
+PRINT "Added changelog function."
+PRINT "Change BGM on Switch from RWIIUG0129 track to"
+PRINT "   ";CHR$(&H22);"With Stealthy Steps";CHR$(&H22);" due to SB4 error."
+PRINT "Resolved other issues on Switch."
+PRINT
+PRINT "Version 1.3 (3DS only):"
+PRINT "Backported most changes from 1.1S and 1.2."
+PRINT
+PRINT "PRESS THE Ⓐ BUTTON TO CONTINUE."
+BTNWAIT
+CLS
+ENDIF
+BGMSTOP
+BGMPLAY BGM%
+GOTO @LOOK
+
+@INIT
+RESTORE @ROOMDATA
+FOR CTRL%=0 TO ROOMS%-1
+READ ROOMNAME$[CTRL%],ROOMDESC$[CTRL%],ROOMDIRECT$[CTRL%],ROOMEXITS$[CTRL%]
+NEXT
+RESTORE @ITEMDATA
+FOR CTRL%=0 TO ITEMS%-1
+READ ITEMNAME$[CTRL%],ITEMDESC$[CTRL%],ITEMUSE$[CTRL%],ITEMLOC%[CTRL%]
+NEXT
+RESTORE @OBJDATA
+FOR CTRL%=0 TO OBJECTS%-1
+READ OBJNAME$[CTRL%],OBJDESC$[CTRL%],OBJUSE$[CTRL%],OBJLOC%[CTRL%]
+NEXT
+RESTORE @ENDDATA
+FOR CTRL%=0 TO 4
+READ ENDING$[CTRL%]
+NEXT
+FILL PLAYERINV%,0
+PLAYERINV%[1]=1
+PLAYERINV%[2]=1
+ROOMID%=1
+ACTION%=20
+HP%=3
+GOTO @INTRO
+
+@DECACTION
+IF ACTION% != -1 THEN ACTION%=ACTION%-1
+RETURN
+
+
+DEF TYPE TTXT$
+VAR TCTRL%,TLEN%,NCHAR$
+TLEN%=LEN(TTXT$)-1
+FOR TCTRL%=0 TO TLEN%
+NCHAR$=MID$(TTXT$,TCTRL%,1)
+IF NCHAR$ == "Θ" THEN
+PRINT
+ELSE
+PRINT NCHAR$;
+ENDIF
+WAIT 5
+NEXT
+PRINT
+WAIT 5
+END
+
+DEF DECRYPT(ETXT$)
+VAR DCTRL%,DLEN%,DTXT$
+DLEN%=LEN(ETXT$)
+DTXT$=MID$(ETXT$,DLEN%-1,1)
+FOR DCTRL%=DLEN%-2 TO 0 STEP -1
+DTXT$=DTXT$+MID$(ETXT$,DCTRL%,1)
+NEXT
+RETURN DTXT$
+END
+
+DEF ITEMTRIM USETYPE%,USESTR$
+VAR USELEN%,SEPARATOR%
+
+USELEN%=LEN(USESTR$)
+SEPARATOR%=INSTR(USESTR$,"|")
+IF USETYPE% == 1 THEN
+USESTR$=MID$(USESTR$,SEPARATOR%+1,USELEN%-SEPARATOR%)
+ELSE
+USESTR$=MID$(USESTR$,0,SEPARATOR%)
+ENDIF
+CALL "TYPE",USESTR$
+END
+
+DEF BTNWAIT
+
+IF NSW% == 1 THEN
+REPEAT
+'WAIT FOR BUTTON PRESS.
+UNTIL BUTTON(0,ABTN%)
+REPEAT
+'WAIT UNTIL RELEASE.
+UNTIL BUTTON(0) == 0
+ELSE
+
+WHILE BUTTON(0) != ABTN%
+WEND
+REPEAT
+'WAIT UNTIL RELEASE.
+UNTIL BUTTON(0) == 0
+ENDIF
+BEEP 3
+END
+
+
+
+
+
+
+@ROOMDATA
+DATA "Void","You get the feeling you shouldn't be here.","N-1E-1S-1W-1","X","Bedroom","A small bedroom with a BED and DRESSER. IsΘit yours? You can't remember.","N-1E02S-1W-1","E","Upstairs Hallway","A hallway. There is a table here.","N-1E-1S-1W01","W","Bathroom","A small bathroom with a luxurious bathtub.","N-1E-1S02W-1","S","Attic","A dusty attic with a single WINDOW.","N-1E-1S-1W-1","X","Foyer","A small entrance near the STAIRS.","N-1E06S-1W-1","E","Kitchen","The kitchen is small, the only appliance aΘFRIDGE.","N07E-1S-1W05","NW","Living Room","The living room has a couch, a coffee tableΘwith assorted junk, and a TELEVISION.","N-1E-1S06W-1","S","yaB oyrC :pihS repeelS",".nottub ylleb ruoy otΘpu retaw mraw htiw ,dopoyrc a edisni era uoYΘ.moor eht gnidoolf ,gniliec eht ni epipΘnekorb a morf sruop retaW .gniralb era smralA","N-1E-1S-1W-1","X"
+
+@ITEMDATA
+DATA "GLITCH","You really shouldn't have this.","NOUSE",-1,"UNDIES","A cute set of pink undergarments.","NOUSE",-1,"NIGHTIE","A cute white nightie, Sheer and knee-length.", "NOUSE",-1,"KEY","An old brass key.","With a click, the door unlocks.|It doesn't fit!",4,"DEAD RAT","A deceased rat.","NOUSE",-1,"KNIFE","A butcher's knife.","The rat goes splat, and the knife breaks!|You use the knife to pry the window pane out,Θand the knife breaks!",7,"STRAWBERRY","A delicious, juicy strawberry.","You feed the RAT the strawberry. Now it'sΘhappy!|MMMM! That's one yummy strawberry!",-1
+
+@OBJDATA
+DATA "TEAR IN REALITY","She who stares into the abyss should take careΘthe abyss does not stare back.","You lack the courage to try.",-1,"BED","A fluffy pink bed. Is it yours?","If I go back to sleep now, I'll wet the bed!",1,"DRESSER","The dresser is full of white dresses and pinkΘundies.","I don't need a change of clothes...yet.",1,"3DS","A Nintendo 3DS sits on the table, charging.","Hey! It's SmileBASIC!",2,"BATHROOM DOOR","The door to the bathroom.","It's locked! I need to use a key!",2,"STAIRS","Stairs heading down.","You head down the stairs.",2,"LADDER","A ladder to the Attic.","You climb up the ladder.",2,"TOILET","A porcelain throne.","Aaaah. Sweet, sweet relief.ΘWell, now it's time for bed.",3,"RAT","A rodent of average size.","I don't think that's a good idea.",4,"WINDOW","Through the window you see a blizzard.","It's stuck and won't budge!",4,"FRONT DOOR","Weird...There's a keyhole on the inside...","It's locked!",5,"FRIDGE","A dingy-looking fridge.","As you open the FRIDGE, the door falls off!",6,"FRIDGE DOOR","The door that fell off the FRIDGE.","No use!",-1,"TELEVISION","The screen displays static, with a distortedΘEmergency Broadcast System barely visible.","None of the buttons work. It's not evenΘplugged in!",7,"EDIRREVO LAUNAM","NWOD LLUPΘ,YCNEGREME FO ESAC NIΘ:EDIRREVO LAUNAMΘsi ti evoba detnirP .revel der A",".nepo spop dopoyrc ruoy sa eralb ot snigebΘmrala etarapes a dna ,nwod revel eht llup uoY",8
+
+@ENDDATA
+DATA "!yaw sevig reddalb ruoYΘregnol yna ni ti dloh t'nac uoY","!daed era uoY .taorhtΘruoy tuo sraet dna repmet sti sesol TAR ehT",".desu saw TELIOT eht litnu tes ebΘt'ndluow eulav noitcerid  s'tixe taht tub ,emitΘyna ta tixe nrehtron a etaerc dna cittA eht niΘWODNIW eht nepo ot EFINK eht esu ot elbissopΘsaw ti ,emag lanigiro eht nI ).daetsni 1- foΘeulav a sesu esaeler sihT( .noitcerid taht niΘtixe na evah t'ndid moor eht fi ot del tixe naΘmoor tahw rof eulav redlohecalp a sa desu sawΘ0 ,emag lanigiro eht nI .0 fo DI mooR a gnivahΘflesti ,DI mooR dilavni na ot tes saw moorΘs'reyalp eht fi redlohecalp eht saw dioV ehTΘ.hctilg a saw gnidne siht ,rotaluclac gnihpargΘ+38-IT eht no erutnevdA txeT sa  desaeler ,emagΘsiht fo tpecnoc lanigiro eht nI :TCAF NUFΘΘ!dioV eht ni reverof tsol flesruoy dnif uoY",".TAR ehtΘtsuj naht erom no desu eb nac EFINK ehT :PITΘΘ.worromotΘot ,flesruoy dna ,esuoh eht fo seiretsym ehtΘevael ot ediced uoy ,peels ot ffo tfird uoy sA",".seceipΘotni derettahs won ,htraE eht sessap ti ,ecapsΘotni stsalb ti sA .sniamer eno ,yletanutroFΘ.yaB doP epacsE ehtΘot yaw ruoy ekam uoy ,yromem elcsum no gniyleR"
+
+
+
+@BGM103
+DATA "T150{R0=[R1]16}{AI=V100E8B8}{BI=V100E8E8}{CI=V100R4}{PAI=V100L16RRRR}{PBI=V100L16{B}RRR}{PCI=V100L16{C}{C}{C}{C}}{A0=V100L4[<C2&C8>E8B8<C8D8>B4<C4>E8D4E4.E4E8D4E2.R4E4.D4.E4G4.F4.E4D4E8E4C4D2E8E4E8B8]2}{B0=V100L8[CC<C>CC<C>CC<D>DDD>C<C<D>DEE<C>EB<C>E<C>EEB<C>EEB<C>EEEEDEDDGGFGGFFGDD>D<DEE>E<EFF<F>FFEDC]2}{C0=V100L4[C4.>B4.E4<C>BEC>BEDGEFEF8G8>C4.>B4.E4<C>BEC>BEDGEFEF8G8]2<<<<<}{D0=V100L4R1}{PA0=V100L16[{A}RRRRR{A}RRRRR{A}RRRRR{A}RRRRR{A}RRR{A}RRR]8}{PB0=V100L16[[{B}RRR]4]16}{PC0=V100L16[[{C}]16]16}{R1=[R1]}{A1=V100L4<C2&C8>E8B8<C8D8>B4<C4>E8D4E4.E4E8D4E2.R4E4.D4.E4G4.F4.E4D4E8E4C4D2E8E4&E8&E8[R1]8}{B1=V100L8[C]8[D]8[E]8[E]8[E]8[G]8[D]8[F]8C1D1E1E1E1G1D1E1}{C1=V100L4[R1]8C4.>B4.E4<C>BEC>BEDGEFEF8G8<C4.>B4.E4<C>BEC>BEDGEFEF8G8<<<}{D1=V100L4R1}{PA1=V100L16[{A}RRRRR{A}RRRRR{A}RRR{A}RRRRR{A}RRRRR{A}RRR{A}RRRRR{A}RRRRR{A}RRRRRRRRR{A}RRRRR{A}RRR]4}{PB1=V100L8[[{B}RRR]2]8L4[[{B}RRR]1]8}{PC1=V100L8[[{C}]8]8L4[[{C}]4]8}{R2=[R1]3R2.}{A2=V100L4R1}{B2=V100L4R1}{C2=V100L4C4.>B4.E4<C>BEC)20C4.>B4.E4<C>BEC}{D2=V100L4R1}{PA2=V100L16R1}{PB2=V100L16R1}{PC2=V100L16R1}:0@20@V44P24O4{AI}[@V36{A0}@V30{A1}{R2}@V36{AI}]:1@0@V100P64O5@E127,64,107,27{AI}[{A0}{A1}{R2}{AI}]:2@17@V100P54O2{BI}[{B0}{B1}{R2}{BI}]:3@17@V70P74O4Q2{BI}[{B0}{B1}{R2}{BI}]:4@18@V60P94O6@E127,107,0,100@MA100,80,3,0{CI}[{C0}{C1}{C2}]:10@V60P33{PAI}[{PA0}{PA1}{R2}{PAI}]:11@V80{PBI}[{PB0}{PB1}{R2}{PBI}]:12@V70P111{PCI}[{PC0}{PC1}{R2}{PCI}]{R=R}{C=@128P64O2@E120,125,30,100F#}{S=@151P64O4@E3,127,127,30@ML54,1,3,0C}{B=@266V80P70O2C}{A=@362P64O8@D-128C} "
+DATA 0
+
+
+
+'@BGM103NSW
+
+'DATA 0
